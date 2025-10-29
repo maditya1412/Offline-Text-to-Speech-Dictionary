@@ -1,0 +1,215 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import json
+import pyttsx3
+import sqlite3
+
+# Connect to SQLite database and creates file if not exists
+conn = sqlite3.connect('dictionary.db')
+cursor = conn.cursor()
+
+# Create table if not exists
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS words (
+    word TEXT PRIMARY KEY,
+    meaning TEXT,
+    example TEXT
+)
+''')
+conn.commit()
+
+# Function to get a word's meaning & example
+def get_word_data(word):
+    cursor.execute("SELECT meaning, example FROM words WHERE word = ?", (word.lower(),))
+    result = cursor.fetchone()
+    return result  # (meaning, example) or None
+
+
+s = []
+
+# functions
+def erase():
+    input.delete(0, tk.END)
+    o_window.config(text = '')
+
+def search():  
+    word = input.get().lower()
+    if not word:
+        messagebox.showwarning('Input Error', 'Please enter a word to search.')
+        return
+
+    ans = get_word_data(word)
+    if ans:
+        meaning, example = ans
+        o_window.config(text=f'{word} : {meaning}.\nEXAMPLE : {example}',font=('Ariel', 18), fg="#000000")
+        s.append((word, meaning))
+    else:
+        o_window.config(text=f'Sorry, the word "{word}" not found in Dictionary.', fg='red')
+        messagebox.showwarning('Input Error', 'Enter a valid word.')
+        s.append((word, 'No meaning found.'))
+
+def s_word():
+    w = input.get().lower()
+    if w:
+        v1 = pyttsx3.init()
+        v1.setProperty('rate', 150)
+        v1.setProperty('volume', 1.0)
+        v1.say(w)
+        v1.runAndWait()
+        v1.stop()
+    else:
+        messagebox.showwarning('Audio Error', 'Please, Enter a word.')
+
+import pyttsx3
+
+def s_meaning():
+    w = input.get().lower()
+    ans = get_word_data(w)
+    if ans:
+        meaning = ans[0]
+        if meaning:
+            v2 = pyttsx3.init()
+            v2.setProperty('rate', 160)
+            v2.setProperty('volume', 1.0)
+            v2.say(meaning)
+            v2.runAndWait()
+            v2.stop()
+        else:
+            messagebox.showwarning('Audio Error', 'Meaning not Found.')
+    else:
+        messagebox.showwarning('Audio Error', 'Meaning not Found.')
+
+def s_example():
+    w = input.get().lower()
+    ans = get_word_data(w)
+    if ans and ans[1]:
+        example = ans[1]
+        v3 = pyttsx3.init()
+        v3.setProperty('rate', 160)
+        v3.setProperty('volume', 1.0)
+        v3.say(example)
+        v3.runAndWait()
+        v3.stop()
+    else:
+        messagebox.showwarning('Audio Error', 'Example not Found.')
+
+def add_word():
+    new_word = input.get().strip().lower()
+    if not new_word:
+        messagebox.showwarning('Input Error', 'Please enter a word first.')
+        return
+
+    # Ask for meaning and example
+    meaning = simpledialog.askstring('Add Meaning', f'Enter meaning for "{new_word}":')
+    if not meaning:
+        messagebox.showwarning('Input Error', 'Meaning is required.')
+        return
+
+    example = simpledialog.askstring('Add Example', f'Enter example for "{new_word}":')
+    if not example:
+        example = ''  # example optional
+
+    # Insert or update the word in the database
+    try:
+        cursor.execute('''
+            INSERT OR REPLACE INTO words (word, meaning, example)
+            VALUES (?, ?, ?)
+        ''', (new_word, meaning, example))
+        conn.commit()
+        messagebox.showinfo('Success', f'Word "{new_word}" added to dictionary!')
+    except Exception as e:
+        messagebox.showerror('Database Error', f'Failed to add word: {e}')
+
+
+def s_history():
+    # window for History
+    history = tk.Toplevel()
+    history.title('Search History')
+    history.geometry('450x450')
+    history.config(bg = 'white')
+
+    # frame
+    f1 = tk.Frame(history, bg = "#BABABA", bd = 7, relief = 'raised')
+    f1.pack(side = 'top', fill = 'both', expand = True)
+    f2 = tk.Frame(history, bg = '#BABABA')
+    f2.pack(side = 'bottom', fill = 'both', expand = True)
+
+    # Scrollbar
+    scrollbar = tk.Scrollbar(f2)
+    scrollbar.pack(side = 'right', fill = 'y')
+
+    # Label
+    h_label = tk.Label(f1,text = 'History', fg = 'black', bg = '#BABABA', font = ('Calibri', 15, 'bold'))
+    h_label.pack()
+    h = tk.Text(f2, bg = '#BABABA', fg = "#C70000", font = ('Calibri', 15, 'bold'), wrap = 'word', yscrollcommand = scrollbar.set)
+    h.pack(side = 'left', fill = 'both', expand = True)
+
+    global s
+    if not s:
+        o_window.config(text = 'No record present.', fg = 'red', font = ('Calibri', 20, 'bold'))
+        h.insert('end', 'No record present.\n')
+    else:
+        h.insert('1.0','\n')
+        for i, (word,mean) in enumerate(s,start = 1):
+            l = len(word)
+            h.insert(f'{i+1}.0', f'{i}.  {word} : {mean}\n')
+            # tags
+            h.tag_add('num', f'{i+1}.0',f'{i+1}.2')
+            h.tag_config('num', foreground = 'black')
+            h.tag_add('word', f'{i+1}.4',f'{i+1}.{l+4}')
+            h.tag_config('word', foreground = "#002fff")
+            h.tag_add('mean', f'{i+1}.{l+4}',f'{i+1}.end')
+            h.tag_config('mean', foreground = "#006400")
+
+    scrollbar.config(command = h.yview)
+    history.mainloop()
+
+# main window
+window = tk.Tk()
+window.title('Dictionary')
+window.geometry('550x650')
+window.config(bg = 'white')
+
+# Frames
+frame1 = tk.Frame(window, bg = 'white', bd = 7, relief = 'raised', height = 30)
+frame1.pack(side = 'top', fill = 'x')
+frame2 = tk.Frame(window, bg = 'white', bd = 7, relief = 'raised')
+frame2.pack(fill = 'both', expand = True)
+frame3 = tk.Frame(frame1, bg = 'white')
+frame3.pack()
+frame4 = tk.Frame(frame1, bg = 'white')
+frame4.pack()
+frame5 = tk.Frame(frame1, bg = 'white')
+frame5.pack()
+
+# Label Widgets
+title = tk.Label(frame3, text = '📖 English Dictionary', bg = 'white' , fg = "#0073FF", font = ('Calibri', 20, 'bold'))
+title.grid(row = 0, column = 0, pady = 20, columnspan = 3)
+o_window = tk.Label(frame2, text = 'Search a word.', font = ('Calibri', 25, 'bold'), fg = 'grey', bg = 'white',wraplength = 500, justify = 'left')
+o_window.pack(side = 'bottom',fill = 'both', expand = True)
+
+# Entry Widgets
+input = tk.Entry(frame4, bd = 5, font = ('Calibri', 19, 'bold'))
+input.grid(row = 0, column = 0, columnspan = 3, pady = 10, padx = 2)
+
+# Button Widgets
+Search = tk.Button(frame4, text = '🔎', font = (4), fg = 'white', bg = 'grey' , bd = 4, width = 4, command = search)
+Search.grid(row = 0, column = 4, pady = 11, padx = 2, columnspan = 2)
+Word = tk.Button(frame5, text = 'Word🔊', width = 10, bg = "#B2B2B2" ,font = ('Calibri', 14, 'bold'), bd = 4,command = s_word)
+Word.grid(row = 0, column = 1, pady = 10, padx = 10)
+Mean = tk.Button(frame5, text = 'Meaning🔊', width = 10, bg = "#B2B2B2" ,font = ('Calibri', 14, 'bold'), bd = 4,command = s_meaning)
+Mean.grid(row = 0, column = 2, pady = 10, padx = 10)
+Example = tk.Button(frame5, text = 'Example🔊', width = 10, bg = "#ACACAC" ,font = ('Calibri', 14, 'bold'), bd = 4,command = s_example)
+Example.grid(row = 0, column = 3, pady = 10, padx = 10)
+Clear = tk.Button(frame5, text = 'Clear', width = 10, bg = 'red', font = ('Calibri', 14, 'bold'), bd = 4,command = erase)
+Clear.grid(row = 0, column = 4, pady = 10, padx = 10)
+History = tk.Button(frame2, text = 'History', width = 10, bg = "#ff9100", fg = 'black', font = ('Calibri', 14, 'bold'), bd = 4,command = s_history)
+History.pack(side = 'left', padx = 5, pady = 5)
+Add = tk.Button(frame2, text='Add Word', width=10, bg="#FF9900", fg='black',font=('Calibri', 14, 'bold'), bd=4, command=add_word)
+Add.pack(side='right', padx=5, pady=5)
+
+# loop 
+window.mainloop()
+
+# closing the database
+conn.close()
